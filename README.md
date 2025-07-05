@@ -54,7 +54,7 @@ npm run dev
 Navigate to http://localhost:3000 to view the app.
 
 ## 📁 Folder Structure
-
+```
 │
 ├── app/                # Main pages & routes
 │   ├── dashboard/      # Dashboard view
@@ -65,7 +65,8 @@ Navigate to http://localhost:3000 to view the app.
 ├── utils/              # Helper functions
 ├── firebase.js         # Firebase configuration
 └── globals.css         # Global styles
-📸 Preview
+```
+## 📸 Preview
 
 ## 📬 Contact
 For any queries or feedback, feel free to reach out:
