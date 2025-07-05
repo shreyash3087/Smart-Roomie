@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Home,
   Search,
@@ -25,7 +25,10 @@ const Header = () => {
     showMobileMenu,
     setShowMobileMenu,
   } = useUser();
-
+  const pathname = usePathname();
+  if (pathname === "/") {
+    return null;
+  }
   const handleSignOut = async () => {
     try {
       await logout();

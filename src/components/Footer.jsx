@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Home,
   Search,
@@ -18,15 +18,14 @@ import {
 import { logout } from "../../utils/firebase";
 import { useUser } from "../../utils/context";
 
-const Footer = ({ 
-  handleListRoom, 
-  getCurrentLocation 
-}) => {
+const Footer = ({ handleListRoom, getCurrentLocation }) => {
   const router = useRouter();
   const { activeTab, handleTabChange } = useUser();
-  const [currentDate, setCurrentDate] = useState('');
-
-  // Fix hydration error by only setting date on client side
+  const [currentDate, setCurrentDate] = useState("");
+  const pathname = usePathname();
+  if (pathname === "/") {
+    return null;
+  }
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString());
   }, []);
@@ -174,15 +173,11 @@ const Footer = ({
               </li>
               <li className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
-                <span className="text-gray-600 text-sm">
-                  Secure Messaging
-                </span>
+                <span className="text-gray-600 text-sm">Secure Messaging</span>
               </li>
               <li className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
-                <span className="text-gray-600 text-sm">
-                  Verified Profiles
-                </span>
+                <span className="text-gray-600 text-sm">Verified Profiles</span>
               </li>
             </ul>
           </div>
@@ -205,9 +200,7 @@ const Footer = ({
             <div className="flex items-center space-x-6">
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <Clock className="w-4 h-4" />
-                <span>
-                  Last updated: {currentDate || 'Loading...'}
-                </span>
+                <span>Last updated: {currentDate || "Loading..."}</span>
               </div>
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <Target className="w-4 h-4" />
