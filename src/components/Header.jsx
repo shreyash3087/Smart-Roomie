@@ -84,7 +84,7 @@ const Header = () => {
                   src={
                     userProfile?.profileImage ||
                     user?.photoURL ||
-                    "/api/placeholder/40/40"
+                    "/Default-Profile.jpg"
                   }
                   alt={userProfile?.name || "User"}
                   className="w-8 h-8 rounded-full object-cover cursor-pointer border-2 border-orange-200 hover:border-orange-400 transition-colors"

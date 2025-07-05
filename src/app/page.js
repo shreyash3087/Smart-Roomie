@@ -758,7 +758,9 @@ Based on this conversation about roommate preferences, extract the key lifestyle
               className="flex items-center space-x-2 text-orange-600 cursor-pointer hover:text-orange-700 transition-colors"
             >
               <ArrowRight className="w-5 h-5" />
-              <span className="text-lg font-medium">Let&apos;s get started</span>
+              <span className="text-lg font-medium">
+                Let&apos;s get started
+              </span>
             </div>
           </div>
         )}
@@ -1232,16 +1234,16 @@ Based on this conversation about roommate preferences, extract the key lifestyle
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-4 flex-1 overflow-y-auto mb-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4 flex-1 overflow-y-auto mb-4 max-lg:max-h-52 max-h-90">
                 {conversationHistory.length === 0 ? (
-                  <div className="text-center py-4 h-full flex flex-col items-center justify-center">
+                  <div className="bg-white text-center px-10 py-4 h-full max-h-80 overflow-hidden flex flex-col items-center justify-center">
                     <div className="lg:hidden h-64 w-64 mb-4">
                       <Spline scene="/scene.splinecode" />
                     </div>
                     <p className="text-gray-600 text-sm">
-                      Hi! I&apos;m Roomie, your smart assistant. Let&apos;s start by
-                      getting to know each other. What&apos;s your ideal living
-                      situation like?
+                      Hi! I&apos;m Roomie, your smart assistant. Let&apos;s
+                      start by getting to know each other. What&apos;s your
+                      ideal living situation like?
                     </p>
                   </div>
                 ) : (

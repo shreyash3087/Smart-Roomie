@@ -23,12 +23,14 @@ const Footer = ({ handleListRoom, getCurrentLocation }) => {
   const { activeTab, handleTabChange } = useUser();
   const [currentDate, setCurrentDate] = useState("");
   const pathname = usePathname();
-  if (pathname === "/") {
-    return null;
-  }
+
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString());
   }, []);
+
+  if (pathname === "/") {
+    return null;
+  }
 
   const handleSignOut = async () => {
     try {

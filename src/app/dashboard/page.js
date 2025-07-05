@@ -427,7 +427,10 @@ const SmartRoomieDashboard = () => {
             <div className="w-full h-48 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
               {listing?.images ? (
                 <img
-                  src={listing.images[0] || "https://assets.simplotel.com/simplotel/image/upload/x_0,y_0,w_1366,h_769,r_0,c_crop,q_80,fl_progressive/w_500,f_auto,c_fit/jehan-numa-palace/hs_k20vrp"}
+                  src={
+                    listing.images[0] ||
+                    "https://assets.simplotel.com/simplotel/image/upload/x_0,y_0,w_1366,h_769,r_0,c_crop,q_80,fl_progressive/w_500,f_auto,c_fit/jehan-numa-palace/hs_k20vrp"
+                  }
                   alt="Listing"
                   className="w-full h-full object-cover"
                 />
@@ -697,40 +700,47 @@ const SmartRoomieDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === "explore" && (
-          <div className="space-y-8">
-            <div className="bg-gradient-to-r from-orange-600 to-amber-500 px-16 py-8 text-white shadow-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h1 className="text-3xl font-bold mb-2">
+          <div className="space-y-6 sm:space-y-8">
+            {/* Hero Section */}
+            <div className="bg-gradient-to-r from-orange-600 to-amber-500 px-4 sm:px-8 lg:px-16 py-6 sm:py-8 text-white shadow-2xl">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 lg:gap-0">
+                <div className="flex-1 w-full lg:w-auto">
+                  <h1 className="text-2xl sm:text-3xl font-bold mb-2">
                     Welcome back,{" "}
                     {userProfile?.name?.split(" ")[0] ||
                       user.displayName?.split(" ")[0] ||
                       "User"}
                   </h1>
-                  <p className="text-lg text-gray-100 mb-6">
+                  <p className="text-base sm:text-lg text-gray-100 mb-4 sm:mb-6">
                     Find compatible roommates and quality accommodations
                   </p>
-                  <div className="flex space-x-4">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                     <button
-                      onClick={()=>{activeTab === "matches"}}
-                      className="bg-white text-orange-600 px-6 py-3 font-medium hover:bg-orange-50 transition-all duration-200 flex items-center space-x-2 hover:scale-105 shadow-lg cursor-pointer"
+                      onClick={() => {
+                        activeTab === "matches";
+                      }}
+                      className="bg-white text-orange-600 px-4 sm:px-6 py-3 rounded-lg font-medium hover:bg-orange-50 transition-all duration-200 flex items-center justify-center space-x-2 hover:scale-105 shadow-lg cursor-pointer w-full sm:w-auto"
                     >
                       <Search className="w-5 h-5" />
                       <span>Find Accommodation</span>
                     </button>
                     <button
                       onClick={handleListRoom}
-                      className="bg-orange-700 text-white px-6 py-3 rounded-lg font-medium hover:bg-orange-800 transition-all duration-200 flex items-center space-x-2 hover:scale-105 shadow-lg cursor-pointer"
+                      className="bg-orange-700 text-white px-4 sm:px-6 py-3 rounded-lg font-medium hover:bg-orange-800 transition-all duration-200 flex items-center justify-center space-x-2 hover:scale-105 shadow-lg cursor-pointer w-full sm:w-auto"
                     >
                       <Plus className="w-5 h-5" />
                       <span>List Property</span>
                     </button>
                   </div>
                 </div>
-                <SplineRoom />
+                <div className="hidden lg:block">
+                  <SplineRoom />
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
               <StatCard
                 icon={Heart}
                 title="Saved Listings"
@@ -757,6 +767,7 @@ const SmartRoomieDashboard = () => {
               />
             </div>
 
+            {/* Location Section */}
             <LocationStatusSection
               currentLocation={currentLocation}
               setCurrentLocation={setCurrentLocation}
@@ -773,9 +784,10 @@ const SmartRoomieDashboard = () => {
               }
             />
 
+            {/* Listings Section */}
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-6">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                   Available Listings
                 </h2>
                 <button
@@ -788,14 +800,14 @@ const SmartRoomieDashboard = () => {
               </div>
 
               {isLoadingListings ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {[1, 2, 3].map((i) => (
                     <div
                       key={i}
-                      className="bg-white rounded-xl p-6 shadow-lg border border-gray-100"
+                      className="bg-white rounded-xl p-4 sm:p-6 shadow-lg border border-gray-100"
                     >
                       <div className="animate-pulse">
-                        <div className="bg-gray-300 h-48 rounded-lg mb-4"></div>
+                        <div className="bg-gray-300 h-32 sm:h-48 rounded-lg mb-4"></div>
                         <div className="space-y-3">
                           <div className="bg-gray-300 h-4 rounded w-3/4"></div>
                           <div className="bg-gray-300 h-4 rounded w-1/2"></div>
@@ -806,18 +818,18 @@ const SmartRoomieDashboard = () => {
                   ))}
                 </div>
               ) : listings.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {listings.map((listing) => (
                     <ListingCard key={listing.id} listing={listing} />
                   ))}
                 </div>
               ) : (
-                <div className="bg-white rounded-xl p-12 shadow-lg border border-gray-100 text-center">
-                  <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                <div className="bg-white rounded-xl p-6 sm:p-12 shadow-lg border border-gray-100 text-center">
+                  <Building className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">
                     No listings available
                   </h3>
-                  <p className="text-gray-600 mb-6">
+                  <p className="text-sm sm:text-base text-gray-600 mb-6">
                     Be the first one to list your room and find great roommates!
                   </p>
                   <button
@@ -892,8 +904,9 @@ const SmartRoomieDashboard = () => {
                       No good matches found
                     </h3>
                     <p className="text-gray-600 mb-6">
-                      We couldn&apos;t find listings that match your preferences and
-                      location. Would you like to see all available listings?
+                      We couldn&apos;t find listings that match your preferences
+                      and location. Would you like to see all available
+                      listings?
                     </p>
                     <button
                       onClick={() => setShowAllListings(true)}
