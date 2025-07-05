@@ -360,7 +360,7 @@ const SmartRoomieDashboard = () => {
   const handleSeekRoom = () => {
     router.push("/seek");
   };
-  console.log(listing?.images[0]?,"SADsa")
+
   const StatCard = ({ icon: Icon, title, value, change, color = "orange" }) => (
     <div className="bg-white p-6 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 group">
       <div className="flex items-center justify-between">
@@ -431,7 +431,7 @@ const SmartRoomieDashboard = () => {
             <div className="w-full h-48 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
               {listing?.images ? (
                 <img
-                  src={listing.images[0]}
+                  src={"https://cdn.vox-cdn.com/thumbor/FenyH9gB_trAYd2zG50Ppw7cNTc=/0x0:2000x1309/1200x0/filters:focal(0x0:2000x1309):no_upscale()/cdn.vox-cdn.com/uploads/chorus_asset/file/7428389/_MG_9855.jpg"}
                   alt="Listing"
                   className="w-full h-full object-cover"
                 />
@@ -669,7 +669,7 @@ const SmartRoomieDashboard = () => {
   };
   const SplineRoom = () => (
     <div className="hidden lg:block w-[500px] h-[400px]">
-      {/* <Spline scene="/scene2.splinecode" /> */}
+      <Spline scene="/scene2.splinecode" />
     </div>
   );
 
