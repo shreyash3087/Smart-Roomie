@@ -3,6 +3,13 @@
 **Smart Roomie** is a sensor-powered intelligent application designed to simplify the process of finding and offering living spaces. Whether you're a **Seeker** looking for a room to rent or a **Lister** with a space to offer, Smart Roomie helps you connect with the right roommate or tenant at the right time.
 
 ---
+### Deployment Link - https://smart-roomie.vercel.app/
+
+### Journey Map -
+[Click here to view the Journey Map PDF](https://github.com/shreyash3087/Smart-Roomie/blob/master/Journey%20Map%20-%20Smart%20Roomie.pdf)
+
+
+The Journey Map includes theoretical concepts and an idealized tech stack. These may or may not correspond exactly to the actual implementation or technology stack used.
 
 ## 🚀 Features
 
