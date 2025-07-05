@@ -67,6 +67,8 @@ Navigate to http://localhost:3000 to view the app.
 └── globals.css         # Global styles
 ```
 ## 📸 Preview
+![Screenshot (1655)](https://github.com/user-attachments/assets/fb904ec3-05a6-413f-84c8-0950d3b58991)
+![Screenshot (1656)](https://github.com/user-attachments/assets/fe7421ba-6a2b-4fba-9906-d8bd1ffc80af)
 
 ## 📬 Contact
 For any queries or feedback, feel free to reach out:
