@@ -22,13 +22,13 @@ import {
 } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAHHJR9RZTh9s-EHFSrcqX0eaVVXHN5BTM",
-  authDomain: "smart-roomie.firebaseapp.com",
-  projectId: "smart-roomie",
-  storageBucket: "smart-roomie.firebasestorage.app",
-  messagingSenderId: "1084036923902",
-  appId: "1:1084036923902:web:5e0e9cefe8962edf2280af",
-  measurementId: "G-QXNRWGZM8L",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
