@@ -632,7 +632,7 @@ const RoomMeasurement = ({ listingData, setListingData, onNext, onBack }) => {
                 AR Not Supported
               </h3>
               <p className="text-amber-700 mb-4">
-                Your device/browser doesn't support WebXR AR. This feature works
+                Your device/browser doesn&apos;t support WebXR AR. This feature works
                 on:
               </p>
               <ul className="text-sm text-amber-700 space-y-1 mb-4">

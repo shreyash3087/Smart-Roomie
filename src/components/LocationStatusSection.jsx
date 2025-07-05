@@ -468,7 +468,7 @@ const LocationStatusSection = ({
                 <h3 className="font-semibold text-gray-900">Search Radius</h3>
               </div>
               <p className="text-sm text-gray-700 mb-4">
-                We'll show you roommates and listings within this distance from
+                We&apos;ll show you roommates and listings within this distance from
                 your location
               </p>
               <div className="space-y-4">

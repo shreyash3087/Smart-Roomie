@@ -896,7 +896,7 @@ const SmartRoomieDashboard = () => {
                       No good matches found
                     </h3>
                     <p className="text-gray-600 mb-6">
-                      We couldn't find listings that match your preferences and
+                      We couldn&apos;t find listings that match your preferences and
                       location. Would you like to see all available listings?
                     </p>
                     <button

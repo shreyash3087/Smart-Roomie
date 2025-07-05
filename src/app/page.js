@@ -694,7 +694,7 @@ Based on this conversation about roommate preferences, extract the key lifestyle
             Profile Complete!
           </h2>
           <p className="text-gray-600 mt-4 mb-8">
-            We've got everything we need to find your{" "}
+            We&apos;ve got everything we need to find your{" "}
             <span className="font-semibold text-orange-600">
               perfect roommate match
             </span>
@@ -749,7 +749,7 @@ Based on this conversation about roommate preferences, extract the key lifestyle
               </h1>
               <p className="text-gray-500 text-lg leading-relaxed mt-4">
                 Answer a few questions about your lifestyle and preferences.
-                We'll match you with compatible roommates in your area.
+                We&apos;ll match you with compatible roommates in your area.
               </p>
             </div>
 
@@ -758,7 +758,7 @@ Based on this conversation about roommate preferences, extract the key lifestyle
               className="flex items-center space-x-2 text-orange-600 cursor-pointer hover:text-orange-700 transition-colors"
             >
               <ArrowRight className="w-5 h-5" />
-              <span className="text-lg font-medium">Let's get started</span>
+              <span className="text-lg font-medium">Let&apos;s get started</span>
             </div>
           </div>
         )}
@@ -892,7 +892,7 @@ Based on this conversation about roommate preferences, extract the key lifestyle
             </div>
 
             <p className="text-center text-sm text-gray-600 mt-6">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <button
                 onClick={() => setCurrentStep("personal")}
                 className="text-orange-600 hover:text-orange-700 font-medium"
@@ -910,7 +910,7 @@ Based on this conversation about roommate preferences, extract the key lifestyle
           >
             <div className="mb-8">
               <h2 className="text-3xl font-medium text-gray-800 mb-2">
-                Let's get to know you
+                Let&apos;s get to know you
               </h2>
               <p className="text-gray-600">
                 Tell us a bit about yourself to get started
@@ -1202,7 +1202,7 @@ Based on this conversation about roommate preferences, extract the key lifestyle
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-800 mb-2">
-                      I'm in a Hurry
+                      I&apos;m in a Hurry
                     </h3>
                     <p className="text-gray-600 text-sm leading-relaxed">
                       Answer quick multiple-choice questions about your
@@ -1224,10 +1224,10 @@ Based on this conversation about roommate preferences, extract the key lifestyle
             <div className="flex-1 flex flex-col lg:max-w-md w-full mx-auto py-8 px-0">
               <div className="mb-6">
                 <h2 className="text-2xl font-medium text-gray-800 mb-2">
-                  Let's Chat About Your Lifestyle
+                  Let&apos;s Chat About Your Lifestyle
                 </h2>
                 <p className="text-gray-600 text-sm">
-                  Tell me about yourself and I'll help find your perfect
+                  Tell me about yourself and I&apos;ll help find your perfect
                   roommate match
                 </p>
               </div>
@@ -1239,8 +1239,8 @@ Based on this conversation about roommate preferences, extract the key lifestyle
                       <Spline scene="/scene.splinecode" />
                     </div>
                     <p className="text-gray-600 text-sm">
-                      Hi! I'm Roomie, your smart assistant. Let's start by
-                      getting to know each other. What's your ideal living
+                      Hi! I&apos;m Roomie, your smart assistant. Let&apos;s start by
+                      getting to know each other. What&apos;s your ideal living
                       situation like?
                     </p>
                   </div>

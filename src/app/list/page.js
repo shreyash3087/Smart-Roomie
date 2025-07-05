@@ -672,7 +672,7 @@ const ListingPage = () => {
                   Basic Details
                 </h2>
                 <p className="text-gray-600">
-                  Tell us about your room and what you're looking for
+                  Tell us about your room and what you&apos;re looking for
                 </p>
               </div>
 
@@ -977,7 +977,7 @@ const ListingPage = () => {
                   Environment Check
                 </h2>
                 <p className="text-gray-600">
-                  Let's measure the noise and light levels in your room
+                  Let&apos;s measure the noise and light levels in your room
                 </p>
               </div>
 
@@ -1058,7 +1058,7 @@ const ListingPage = () => {
                           <strong>Measuring Natural Light in Your Room</strong>
                         </p>
                         <p class="text-sm text-gray-600">
-                          To check ambient light levels, use your device's light
+                          To check ambient light levels, use your device&apos;s light
                           sensor (available on most smartphones). For a quick
                           test, cover the camera with your fingers—if the
                           display dims, the sensor is active.
