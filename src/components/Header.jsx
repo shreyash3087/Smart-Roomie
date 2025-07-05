@@ -45,7 +45,7 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             <div
               className="flex items-center space-x-3 group cursor-pointer"
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/dashboard")}
             >
               <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center group-hover:bg-orange-700 transition-colors">
                 <Home className="w-5 h-5 text-white" />
