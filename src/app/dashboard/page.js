@@ -3,43 +3,79 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   MapPin,
-  Home,
   Search,
   Plus,
-  Bell,
   User,
   Settings,
   Heart,
   MessageCircle,
   Calendar,
   Shield,
-  Clock,
   Users,
   Building,
   ChevronRight,
   Loader2,
   ArrowRight,
   TrendingUp,
-  Target,
   CheckCircle,
   AlertCircle,
-  Menu,
-  LogOut,
   X,
 } from "lucide-react";
 import {
-  auth,
   db,
-  logout,
   getUserProfile,
   updateUserLocation,
 } from "../../../utils/firebase";
-import { collection, getDocs, query, limit, orderBy } from "firebase/firestore";
-import { useAuthState } from "react-firebase-hooks/auth";
+import {
+  collection,
+  getDocs,
+  query,
+  limit,
+  orderBy,
+  where,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import Messages from "@/components/Messages";
 import Spline from "@splinetool/react-spline";
 import LocationStatusSection from "@/components/LocationStatusSection";
 import { useUser } from "../../../utils/context";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const normalizeLocation = (location) => {
+  if (!location) return null;
+  if (
+    location &&
+    typeof location === "object" &&
+    typeof location.lat === "number" &&
+    typeof location.lng === "number"
+  ) {
+    return location;
+  }
+
+  if (
+    location &&
+    typeof location === "object" &&
+    typeof location.latitude === "number" &&
+    typeof location.longitude === "number"
+  ) {
+    return { lat: location.latitude, lng: location.longitude };
+  }
+
+  if (typeof location === "string") {
+    try {
+      const parsed = JSON.parse(location);
+      return normalizeLocation(parsed);
+    } catch (e) {
+      console.warn("Could not parse location string:", location);
+      return null;
+    }
+  }
+
+  console.warn("Unknown location format:", location);
+  return null;
+};
+
 const SmartRoomieDashboard = () => {
   const {
     user,
@@ -48,10 +84,9 @@ const SmartRoomieDashboard = () => {
     activeTab,
     loading,
     error,
-    showMobileMenu,
-    setShowMobileMenu,
+    handleTabChange,
   } = useUser();
-
+  const [showAllListings, setShowAllListings] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [locationName, setLocationName] = useState("");
   const [locationError, setLocationError] = useState(null);
@@ -61,8 +96,22 @@ const SmartRoomieDashboard = () => {
   const router = useRouter();
   const [listingMatches, setListingMatches] = useState({});
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [userSearchRadius, setUserSearchRadius] = useState(10);
+
   const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+  useEffect(() => {
+    const getUserSearchRadius = async () => {
+      if (userProfile?.location?.searchRadius) {
+        setUserSearchRadius(userProfile.location.searchRadius);
+      }
+    };
+
+    if (userProfile) {
+      getUserSearchRadius();
+    }
+  }, [userProfile]);
   useEffect(() => {
     if (!loading && !user) {
       router.push("/");
@@ -88,15 +137,18 @@ const SmartRoomieDashboard = () => {
     const loadListings = async () => {
       try {
         const listingsRef = collection(db, "listings");
-        const q = query(listingsRef, orderBy("createdAt", "desc"), limit(6));
+        const q = query(listingsRef, orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
 
         const listingsData = [];
         querySnapshot.forEach((doc) => {
-          listingsData.push({
-            id: doc.id,
-            ...doc.data(),
-          });
+          const data = doc.data();
+          if (data.userId !== user?.uid) {
+            listingsData.push({
+              id: doc.id,
+              ...data,
+            });
+          }
         });
 
         setListings(listingsData);
@@ -107,14 +159,16 @@ const SmartRoomieDashboard = () => {
       }
     };
 
-    loadListings();
-  }, []);
+    if (user) {
+      loadListings();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (listings.length > 0 && userProfile?.preferences) {
       fetchListingCompatibility(listings);
     }
-  }, [listings, userProfile?.preferences]);
+  }, [listings, userProfile?.preferences, currentLocation, userSearchRadius]);
 
   const extractUserTags = (preferences) => {
     if (!preferences) return [];
@@ -170,7 +224,6 @@ const SmartRoomieDashboard = () => {
       return 0;
     }
   };
-  const [showAllListings, setShowAllListings] = useState(false);
   const fetchListingCompatibility = async (listings) => {
     if (!userProfile?.preferences || listings.length === 0) return;
 
@@ -192,8 +245,13 @@ const SmartRoomieDashboard = () => {
         })
       );
 
-      const userPreferredLocation =
-        userProfile?.preferredLocation || currentLocation;
+      const userLocation = normalizeLocation(
+        currentLocation ||
+          userProfile?.location?.location ||
+          userProfile?.preferredLocation
+      );
+
+      console.log("User location for distance calculation:", userLocation);
 
       await Promise.all(
         listings.map(async (listing) => {
@@ -209,14 +267,27 @@ const SmartRoomieDashboard = () => {
 
           let distanceScore = 0;
           let distanceInKm = 999999;
-          if (userPreferredLocation && listing.location) {
-            distanceInKm = await calculateDistance(
-              userPreferredLocation,
+
+          if (userLocation && listing.location) {
+            const normalizedListingLocation = normalizeLocation(
               listing.location
             );
-            distanceScore = Math.max(0, ((50 - distanceInKm) / 50) * 100);
-          }
+            if (normalizedListingLocation) {
+              console.log(`Calculating distance for listing ${listing.id}:`, {
+                from: userLocation,
+                to: normalizedListingLocation,
+              });
 
+              distanceInKm = await calculateDistance(
+                userLocation,
+                normalizedListingLocation
+              );
+
+              console.log(`Distance calculated: ${distanceInKm}km`);
+
+              distanceScore = Math.max(0, ((50 - distanceInKm) / 50) * 100);
+            }
+          }
           const combinedScore = Math.round(
             compatibilityScore * 0.7 + distanceScore * 0.3
           );
@@ -225,10 +296,12 @@ const SmartRoomieDashboard = () => {
             compatibility: compatibilityScore,
             distance: distanceInKm,
             combinedScore: combinedScore,
+            withinRadius: distanceInKm <= userSearchRadius,
           };
         })
       );
 
+      console.log("All matches calculated:", matches);
       setListingMatches(matches);
     } catch (error) {
       console.error("Error fetching compatibility:", error);
@@ -236,25 +309,102 @@ const SmartRoomieDashboard = () => {
       setIsLoadingMatches(false);
     }
   };
-  const getFilteredListings = () => {
-    if (showAllListings) return listings;
 
-    return listings.filter((listing) => {
-      const match = listingMatches[listing.id];
-      return match && match.combinedScore > 40;
+  const getFilteredListings = () => {
+    if (showAllListings) {
+      return listings.sort((a, b) => {
+        const aMatch = listingMatches[a.id] || { combinedScore: 0 };
+        const bMatch = listingMatches[b.id] || { combinedScore: 0 };
+        return bMatch.combinedScore - aMatch.combinedScore;
+      });
+    }
+    const userLocation = normalizeLocation(
+      currentLocation ||
+        userProfile?.location?.location ||
+        userProfile?.preferredLocation
+    );
+
+    let filteredListings = listings;
+
+    if (userLocation) {
+      filteredListings = listings.filter((listing) => {
+        const match = listingMatches[listing.id];
+        if (!match) return false;
+
+        return match.withinRadius && match.combinedScore >= 40;
+      });
+    } else {
+      filteredListings = listings.filter((listing) => {
+        const match = listingMatches[listing.id];
+        return match && match.combinedScore >= 40;
+      });
+    }
+
+    return filteredListings.sort((a, b) => {
+      const aMatch = listingMatches[a.id] || { combinedScore: 0 };
+      const bMatch = listingMatches[b.id] || { combinedScore: 0 };
+      return bMatch.combinedScore - aMatch.combinedScore;
     });
   };
+  useEffect(() => {
+    if (listings.length > 0 && userProfile?.preferences) {
+      fetchListingCompatibility(listings);
+    }
+  }, [listings, userProfile?.preferences, currentLocation, userSearchRadius]);
+
+  const updateSearchRadius = async (newRadius) => {
+    if (user && userProfile) {
+      try {
+        await updateUserLocation(user.uid, {
+          ...userProfile.location,
+          searchRadius: newRadius,
+        });
+
+        setUserSearchRadius(newRadius);
+        setUserProfile((prev) => ({
+          ...prev,
+          location: {
+            ...prev.location,
+            searchRadius: newRadius,
+          },
+        }));
+      } catch (error) {
+        console.error("Error updating search radius:", error);
+      }
+    }
+  };
+
   const calculateDistance = async (userLocation, listingLocation) => {
     try {
-      if (!userLocation || !listingLocation) return 999999;
+      const normalizedUserLocation = normalizeLocation(userLocation);
+      const normalizedListingLocation = normalizeLocation(listingLocation);
+
+      if (!normalizedUserLocation || !normalizedListingLocation) {
+        console.warn("Invalid locations for distance calculation:", {
+          user: normalizedUserLocation,
+          listing: normalizedListingLocation,
+        });
+        return 999999;
+      }
+
+      // Check if Google Maps is available
+      if (typeof google === "undefined" || !google.maps) {
+        console.warn(
+          "Google Maps not available, using fallback distance calculation"
+        );
+        return calculateHaversineDistance(
+          normalizedUserLocation,
+          normalizedListingLocation
+        );
+      }
 
       const service = new google.maps.DistanceMatrixService();
 
       return new Promise((resolve, reject) => {
         service.getDistanceMatrix(
           {
-            origins: [userLocation],
-            destinations: [listingLocation],
+            origins: [normalizedUserLocation],
+            destinations: [normalizedListingLocation],
             travelMode: google.maps.TravelMode.DRIVING,
             unitSystem: google.maps.UnitSystem.METRIC,
             avoidHighways: false,
@@ -262,11 +412,29 @@ const SmartRoomieDashboard = () => {
           },
           (response, status) => {
             if (status === google.maps.DistanceMatrixStatus.OK) {
-              const distance =
-                response.rows[0].elements[0].distance?.value || 999999;
-              resolve(distance / 1000);
+              const element = response.rows[0].elements[0];
+              if (element.status === "OK") {
+                const distance = element.distance?.value || 999999;
+                resolve(distance / 1000); // Convert to kilometers
+              } else {
+                console.warn("Distance calculation failed:", element.status);
+                // Fallback to Haversine distance
+                resolve(
+                  calculateHaversineDistance(
+                    normalizedUserLocation,
+                    normalizedListingLocation
+                  )
+                );
+              }
             } else {
-              resolve(999999);
+              console.warn("Distance Matrix API failed:", status);
+              // Fallback to Haversine distance
+              resolve(
+                calculateHaversineDistance(
+                  normalizedUserLocation,
+                  normalizedListingLocation
+                )
+              );
             }
           }
         );
@@ -276,9 +444,22 @@ const SmartRoomieDashboard = () => {
       return 999999;
     }
   };
+  const calculateHaversineDistance = (pos1, pos2) => {
+    const R = 6371;
+    const dLat = ((pos2.lat - pos1.lat) * Math.PI) / 180;
+    const dLon = ((pos2.lng - pos1.lng) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((pos1.lat * Math.PI) / 180) *
+        Math.cos((pos2.lat * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
   const getLocationName = async (lat, lng) => {
     try {
-      console.log(process.env.NEXT_APP_OPENCAGE_API_KEY);
       const response = await fetch(
         `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${process.env.NEXT_PUBLIC_OPENCAGE_API_KEY}&limit=1`
       );
@@ -301,7 +482,6 @@ const SmartRoomieDashboard = () => {
       return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     }
   };
-
   const getCurrentLocation = async () => {
     setIsLoadingLocation(true);
     setLocationError(null);
@@ -323,8 +503,32 @@ const SmartRoomieDashboard = () => {
 
       setCurrentLocation(location);
 
-      const name = await getLocationName(location.lat, location.lng);
-      setLocationName(name);
+      try {
+        const name = await getLocationName(location.lat, location.lng);
+        setLocationName(name);
+
+        if (user) {
+          await updateUserLocation(user.uid, {
+            location: { lat: location.lat, lng: location.lng },
+            locationName: name,
+            updatedAt: new Date(),
+          });
+
+          setUserProfile((prev) => ({
+            ...prev,
+            location: {
+              ...prev.location,
+              location: { lat: location.lat, lng: location.lng },
+              locationName: name,
+            },
+          }));
+        }
+      } catch (nameError) {
+        console.error("Error getting location name:", nameError);
+        setLocationName(
+          `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`
+        );
+      }
     } catch (error) {
       setLocationError(
         "Unable to access location. Please enable location services."
@@ -336,22 +540,40 @@ const SmartRoomieDashboard = () => {
   };
 
   useEffect(() => {
-    getCurrentLocation();
-  }, []);
+    const initializeLocation = async () => {
+      if (userProfile?.location?.location) {
+        const normalizedLocation = normalizeLocation(
+          userProfile.location.location
+        );
+        setCurrentLocation(normalizedLocation);
 
-  const handleSignOut = async () => {
-    try {
-      await logout();
-      router.push("/");
-    } catch (error) {
-      console.error("Error signing out:", error);
+        // Set search radius from user profile
+        if (userProfile.location.searchRadius) {
+          setUserSearchRadius(userProfile.location.searchRadius);
+        }
+
+        if (userProfile.location.locationName) {
+          setLocationName(userProfile.location.locationName);
+        } else if (normalizedLocation) {
+          try {
+            const name = await getLocationName(
+              normalizedLocation.lat,
+              normalizedLocation.lng
+            );
+            setLocationName(name);
+          } catch (error) {
+            console.error("Error getting location name:", error);
+          }
+        }
+      } else {
+        getCurrentLocation();
+      }
+    };
+
+    if (userProfile !== null) {
+      initializeLocation();
     }
-  };
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setShowMobileMenu(false);
-  };
+  }, [userProfile]);
 
   const handleListRoom = () => {
     router.push("/list");
@@ -412,6 +634,67 @@ const SmartRoomieDashboard = () => {
       if (percentage >= 60) return "text-yellow-600 bg-yellow-50";
       if (percentage >= 40) return "text-orange-600 bg-orange-50";
       return "text-red-600 bg-red-50";
+    };
+    const handleConnect = async () => {
+      try {
+        const conversationsRef = collection(db, "conversations");
+        const q = query(
+          conversationsRef,
+          where("participants", "array-contains", user.uid)
+        );
+        const querySnapshot = await getDocs(q);
+
+        let existingConversation = null;
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.participants.includes(listing.userId)) {
+            existingConversation = { id: doc.id, ...data };
+          }
+        });
+
+        if (existingConversation) {
+          handleTabChange("messages");
+          return;
+        }
+        const newConversation = {
+          participants: [user.uid, listing.userId],
+          participantNames: {
+            [user.uid]: userProfile?.name || user.displayName || "Anonymous",
+            [listing.userId]: listing.userName || "Anonymous",
+          },
+          listingTitle: listing.title || "Property Inquiry",
+          listingId: listing.id,
+          matchData: {
+            compatibility: match.compatibility || 0,
+            distance: match.distance || 999999,
+            combinedScore: match.combinedScore || 0,
+            withinRadius: match.withinRadius || false,
+          },
+          createdAt: serverTimestamp(),
+          lastMessage: "",
+          lastMessageAt: serverTimestamp(),
+          lastMessageSenderId: user.uid,
+        };
+
+        const docRef = await addDoc(conversationsRef, newConversation);
+        const messagesRef = collection(
+          db,
+          "conversations",
+          docRef.id,
+          "messages"
+        );
+        await addDoc(messagesRef, {
+          text: `Hi! I'm interested in your listing: ${listing.title}`,
+          senderId: user.uid,
+          senderName: userProfile?.name || user.displayName || "Anonymous",
+          createdAt: serverTimestamp(),
+          read: false,
+        });
+
+        handleTabChange("messages");
+      } catch (error) {
+        console.error("Error connecting with lister:", error);
+      }
     };
 
     const formatDistance = (distance) => {
@@ -537,20 +820,29 @@ const SmartRoomieDashboard = () => {
               )}
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between space-x-3">
               <div className="text-2xl font-bold text-gray-900">
                 ${listing.rent || "N/A"}
                 <span className="text-sm font-normal text-gray-500">
                   /month
                 </span>
               </div>
-              <button
-                onClick={() => setShowDetails(true)}
-                className="bg-orange-600 text-white hover:cursor-pointer px-6 py-2 hover:bg-orange-700 transition-colors flex items-center space-x-2 group"
-              >
-                <span className="text-sm font-medium">View Details</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleConnect}
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors flex items-center space-x-1"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="text-sm">Connect</span>
+                </button>
+                <button
+                  onClick={() => setShowDetails(true)}
+                  className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition-colors flex items-center space-x-1"
+                >
+                  <span className="text-sm">Details</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -786,18 +1078,38 @@ const SmartRoomieDashboard = () => {
 
             {/* Listings Section */}
             <div>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-4">
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-                  Available Listings
+                  {showAllListings ? "All Listings" : "Matched Listings"}
                 </h2>
-                <button
-                  onClick={() => router.push("/listings")}
-                  className="text-orange-600 hover:text-orange-700 font-medium flex items-center space-x-2 transition-colors"
-                >
-                  <span>View All</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  {/* Toggle Button */}
+                  <button
+                    onClick={() => setShowAllListings(!showAllListings)}
+                    className="text-orange-600 hover:text-orange-700 font-medium flex items-center space-x-2 transition-colors"
+                  >
+                    <span>
+                      {showAllListings
+                        ? "Show Matched Only"
+                        : "Show All Listings"}
+                    </span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              {/* Filter Summary */}
+              {!showAllListings && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center space-x-2 text-blue-800">
+                    <Shield className="w-5 h-5" />
+                    <span className="font-medium">
+                      Showing {getFilteredListings().length} listings within{" "}
+                      {userSearchRadius}km with {">40%"} compatibility
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {isLoadingListings ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -817,9 +1129,9 @@ const SmartRoomieDashboard = () => {
                     </div>
                   ))}
                 </div>
-              ) : listings.length > 0 ? (
+              ) : getFilteredListings().length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                  {listings.map((listing) => (
+                  {getFilteredListings().map((listing) => (
                     <ListingCard key={listing.id} listing={listing} />
                   ))}
                 </div>
@@ -827,18 +1139,33 @@ const SmartRoomieDashboard = () => {
                 <div className="bg-white rounded-xl p-6 sm:p-12 shadow-lg border border-gray-100 text-center">
                   <Building className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">
-                    No listings available
+                    {showAllListings
+                      ? "No listings available"
+                      : "No matches found"}
                   </h3>
                   <p className="text-sm sm:text-base text-gray-600 mb-6">
-                    Be the first one to list your room and find great roommates!
+                    {showAllListings
+                      ? "Be the first one to list your room and find great roommates!"
+                      : `No listings found within ${userSearchRadius}km with good compatibility. Try increasing your search radius or view all listings.`}
                   </p>
-                  <button
-                    onClick={handleListRoom}
-                    className="bg-orange-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2 mx-auto"
-                  >
-                    <Plus className="w-5 h-5" />
-                    <span>List Your Room</span>
-                  </button>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    {!showAllListings && (
+                      <button
+                        onClick={() => setShowAllListings(true)}
+                        className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
+                      >
+                        <Search className="w-5 h-5" />
+                        <span>Show All Listings</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={handleListRoom}
+                      className="bg-orange-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2 mx-auto"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span>List Your Room</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -929,20 +1256,11 @@ const SmartRoomieDashboard = () => {
                 Messages
               </h1>
               <p className="text-lg text-gray-600">
-                Chat with potential roommates
+                Chat with potential roommates and property listers
               </p>
             </div>
 
-            <div className="bg-white rounded-xl p-12 shadow-lg border border-gray-100 text-center">
-              <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                No messages yet
-              </h3>
-              <p className="text-gray-600">
-                Start a conversation with your matches to find your perfect
-                roommate
-              </p>
-            </div>
+            <Messages user={user} userProfile={userProfile} />
           </div>
         )}
 

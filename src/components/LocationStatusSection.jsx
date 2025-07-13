@@ -27,14 +27,16 @@ const LocationStatusSection = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchRadius, setSearchRadius] = useState(userProfile?.searchRadius || 10);
+  const [searchRadius, setSearchRadius] = useState(
+    userProfile?.searchRadius || 10
+  );
   const mapRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [placesService, setPlacesService] = useState(null);
   const [geocoder, setGeocoder] = useState(null);
   const [isGoogleMapsReady, setIsGoogleMapsReady] = useState(false);
   const [googleMapsLoader, setGoogleMapsLoader] = useState(null);
-  
+
   const defaultLocation = {
     lat: 40.7128,
     lng: -74.006,
@@ -132,18 +134,33 @@ const LocationStatusSection = ({
         lng: position.coords.longitude,
         accuracy: position.coords.accuracy,
       };
-
+      
       setCurrentLocation(location);
-      const name = await getLocationName(location.lat, location.lng);
-      setLocationName(name);
-
-      await updateUserLocation({
-        latitude: location.lat,
-        longitude: location.lng,
-        locationName: name,
-        searchRadius: searchRadius,
-        updatedAt: new Date().toISOString(),
-      });
+      
+      // Get location name first, then update user location
+      try {
+        const resolvedLocationName = await getLocationName(location.lat, location.lng);
+        setLocationName(resolvedLocationName);
+        
+        await updateUserLocation({
+          location: { lat: location.lat, lng: location.lng },
+          locationName: resolvedLocationName,
+          searchRadius: searchRadius,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (nameError) {
+        console.error("Error getting location name:", nameError);
+        // Update with coordinates as fallback
+        const fallbackName = `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`;
+        setLocationName(fallbackName);
+        
+        await updateUserLocation({
+          location: { lat: location.lat, lng: location.lng },
+          locationName: fallbackName,
+          searchRadius: searchRadius,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       setLocationError(
         "Unable to access location. Please enable location services."
@@ -156,15 +173,26 @@ const LocationStatusSection = ({
 
   const handleSearchRadiusChange = async (newRadius) => {
     setSearchRadius(newRadius);
-
     if (currentLocation) {
-      await updateUserLocation({
-        latitude: currentLocation.lat,
-        longitude: currentLocation.lng,
-        locationName: locationName,
-        searchRadius: newRadius,
-        updatedAt: new Date().toISOString(),
-      });
+      try {
+        const resolvedLocationName = locationName || await getLocationName(currentLocation.lat, currentLocation.lng);
+        
+        await updateUserLocation({
+          location: { lat: currentLocation.lat, lng: currentLocation.lng },
+          locationName: resolvedLocationName,
+          searchRadius: newRadius,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error updating search radius:", error);
+        // Update with current location name as fallback
+        await updateUserLocation({
+          location: { lat: currentLocation.lat, lng: currentLocation.lng },
+          locationName: locationName || `${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`,
+          searchRadius: newRadius,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     }
   };
 
@@ -181,7 +209,7 @@ const LocationStatusSection = ({
 
       const request = {
         input: query,
-        types: ["(cities)"], 
+        types: ["(cities)"],
       };
 
       const predictions = await new Promise((resolve, reject) => {
@@ -255,14 +283,17 @@ const LocationStatusSection = ({
     setSearchQuery("");
     setSuggestions([]);
     setShowSearch(false);
-
-    await updateUserLocation({
-      latitude: location.lat,
-      longitude: location.lng,
-      locationName: location.name,
-      searchRadius: searchRadius,
-      updatedAt: new Date().toISOString(),
-    });
+    
+    try {
+      await updateUserLocation({
+        location: { lat: location.lat, lng: location.lng },
+        locationName: location.name,
+        searchRadius: searchRadius,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error updating user location:", error);
+    }
   };
 
   const displayLocation = currentLocation || defaultLocation;
@@ -433,7 +464,9 @@ const LocationStatusSection = ({
               <div className="space-y-3">
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Location Name</p>
-                  <p className="font-medium text-gray-900 break-words">{displayName}</p>
+                  <p className="font-medium text-gray-900 break-words">
+                    {displayName}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -468,8 +501,8 @@ const LocationStatusSection = ({
                 <h3 className="font-semibold text-gray-900">Search Radius</h3>
               </div>
               <p className="text-sm text-gray-700 mb-4">
-                We&apos;ll show you roommates and listings within this distance from
-                your location
+                We&apos;ll show you roommates and listings within this distance
+                from your location
               </p>
               <div className="space-y-4">
                 <div className="flex items-center space-x-4">
@@ -478,9 +511,10 @@ const LocationStatusSection = ({
                     min="1"
                     max="50"
                     value={searchRadius}
-                    onChange={(e) => handleSearchRadiusChange(parseInt(e.target.value))}
+                    onChange={(e) =>
+                      handleSearchRadiusChange(parseInt(e.target.value))
+                    }
                     className="flex-1 h-2 bg-gray-200 rounded-lg cursor-pointer"
-    
                     aria-label={`Search radius: ${searchRadius} miles`}
                   />
                   <span className="text-sm font-medium text-gray-900 bg-white px-3 py-1 rounded-lg border border-gray-200 min-w-0 flex-shrink-0">
@@ -527,8 +561,6 @@ const LocationStatusSection = ({
           </div>
         </div>
       </div>
-
-
     </div>
   );
 };

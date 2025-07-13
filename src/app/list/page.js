@@ -9,28 +9,18 @@ import {
   Volume2,
   Sun,
   Camera,
-  Compass,
   CheckCircle,
   ArrowRight,
   ArrowLeft,
   Loader2,
   User,
-  Play,
   Pause,
-  RotateCcw,
-  Navigation,
-  Move,
   Mic,
   Eye,
   Save,
 } from "lucide-react";
 import { useUser } from "../../../utils/context";
-import {
-  db,
-  updateUserProfile,
-  uploadImage,
-  storage,
-} from "../../../utils/firebase";
+import { db, uploadImage, updateUserProfile } from "../../../utils/firebase";
 import {
   collection,
   addDoc,
@@ -39,6 +29,7 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import RoomMeasurement from "../../components/RoomMeasurement";
+import { Loader } from "@googlemaps/js-api-loader";
 
 const ListingPage = () => {
   const { user, userProfile, setUserProfile } = useUser();
@@ -47,6 +38,7 @@ const ListingPage = () => {
   const [missingFields, setMissingFields] = useState([]);
   const [noiseInterval, setNoiseInterval] = useState(null);
   const [lightInterval, setLightInterval] = useState(null);
+  const [googleMapsLoader, setGoogleMapsLoader] = useState(null);
   const [profileForm, setProfileForm] = useState({
     name: "",
     age: "",
@@ -96,15 +88,27 @@ const ListingPage = () => {
     { id: 6, title: "Upload Photos", icon: Camera },
   ];
   useEffect(() => {
-    // Initialize Google Maps
-    if (window.google && window.google.maps) {
-      setIsGoogleMapsReady(true);
-      const service = new window.google.maps.places.PlacesService(
-        document.createElement("div")
-      );
-      setPlacesService(service);
-    }
+    const loader = new Loader({
+      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+      version: "weekly",
+      libraries: ["places"],
+    });
+
+    setGoogleMapsLoader(loader);
+    loader
+      .load()
+      .then(() => {
+        setIsGoogleMapsReady(true);
+        const service = new window.google.maps.places.PlacesService(
+          document.createElement("div")
+        );
+        setPlacesService(service);
+      })
+      .catch((error) => {
+        console.error("Error loading Google Maps:", error);
+      });
   }, []);
+
   useEffect(() => {
     if (userProfile) {
       const required = ["name", "age", "email"];
@@ -262,7 +266,33 @@ const ListingPage = () => {
       setIsSearching(false);
     }
   };
+  const updateProfile = async () => {
+    try {
+      setSubmitting(true);
 
+      await updateUserProfile(user.uid, {
+        name: profileForm.name,
+        age: profileForm.age,
+        email: profileForm.email,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setUserProfile((prev) => ({
+        ...prev,
+        name: profileForm.name,
+        age: profileForm.age,
+        email: profileForm.email,
+      }));
+
+      setProfileComplete(true);
+      setCurrentStep(1);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      alert("Error updating profile. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const handleLocationSelect = (suggestion) => {
     setListingData((prev) => ({
       ...prev,
@@ -875,7 +905,7 @@ const ListingPage = () => {
                     </div>
 
                     {showLocationSearch && (
-                      <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="border border-gray-200 rounded-lg p-4 relative">
                         <div className="relative">
                           <input
                             type="text"
@@ -895,7 +925,7 @@ const ListingPage = () => {
                         </div>
 
                         {suggestions.length > 0 && (
-                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+                          <div className="absolute top-16 left-4 right-4 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
                             {suggestions.map((suggestion) => (
                               <button
                                 key={suggestion.id}
@@ -1053,14 +1083,14 @@ const ListingPage = () => {
                       <h3 className="font-semibold text-gray-900">
                         Light Level
                       </h3>
-                      <div class="max-w-96">
-                        <p class="text-sm text-gray-600 mb-2">
+                      <div className="max-w-96">
+                        <p className="text-sm text-gray-600 mb-2">
                           <strong>Measuring Natural Light in Your Room</strong>
                         </p>
-                        <p class="text-sm text-gray-600">
-                          To check ambient light levels, use your device&apos;s light
-                          sensor (available on most smartphones). For a quick
-                          test, cover the camera with your fingers—if the
+                        <p className="text-sm text-gray-600">
+                          To check ambient light levels, use your device&apos;s
+                          light sensor (available on most smartphones). For a
+                          quick test, cover the camera with your fingers—if the
                           display dims, the sensor is active.
                         </p>
                       </div>
