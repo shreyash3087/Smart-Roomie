@@ -64,7 +64,7 @@ const Header = () => {
                 <button
                   key={item.id}
                   onClick={() => handleTabChange(item.id)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                  className={`px-3 py-2 rounded-md cursor-pointer text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
                     activeTab === item.id
                       ? "bg-orange-100 text-orange-600 shadow-sm"
                       : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"

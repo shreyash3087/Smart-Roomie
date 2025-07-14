@@ -415,10 +415,9 @@ const SmartRoomieDashboard = () => {
               const element = response.rows[0].elements[0];
               if (element.status === "OK") {
                 const distance = element.distance?.value || 999999;
-                resolve(distance / 1000); // Convert to kilometers
+                resolve(distance / 1000);
               } else {
                 console.warn("Distance calculation failed:", element.status);
-                // Fallback to Haversine distance
                 resolve(
                   calculateHaversineDistance(
                     normalizedUserLocation,
@@ -428,7 +427,6 @@ const SmartRoomieDashboard = () => {
               }
             } else {
               console.warn("Distance Matrix API failed:", status);
-              // Fallback to Haversine distance
               resolve(
                 calculateHaversineDistance(
                   normalizedUserLocation,

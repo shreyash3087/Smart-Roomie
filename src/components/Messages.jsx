@@ -30,15 +30,9 @@ import {
   Timestamp,
   getDoc,
 } from "firebase/firestore";
-import { db, storage } from "../../utils/firebase";
+import { db } from "../../utils/firebase";
 import { Download } from "lucide-react";
-import { 
-  getStorage, 
-  ref, 
-  uploadBytes, 
-  getDownloadURL 
-} from "firebase/storage";
-
+import jsPDF from "jspdf";
 const Messages = ({ user, userProfile }) => {
   const [conversations, setConversations] = useState([]);
   const [isCurrentUserLister, setIsCurrentUserLister] = useState(false);
@@ -55,7 +49,7 @@ const Messages = ({ user, userProfile }) => {
   const [participantProfiles, setParticipantProfiles] = useState({});
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedUserProfile, setSelectedUserProfile] = useState(null);
-
+  const [isGeneratingLease, setIsGeneratingLease] = useState(false);
   const [leaseTerms, setLeaseTerms] = useState({
     rent: "",
     deposit: "",
@@ -65,6 +59,12 @@ const Messages = ({ user, userProfile }) => {
     furnished: false,
     parking: false,
     pets: false,
+    roommate1Name: "",
+    roommate1Email: "",
+    roommate2Name: "",
+    roommate2Email: "",
+    roommate1RentShare: "",
+    roommate2RentShare: "",
   });
   const GEMINI_API_KEY =
     process.env.NEXT_PUBLIC_GEMINI_API_KEY || "your-api-key-here";
@@ -116,26 +116,44 @@ const Messages = ({ user, userProfile }) => {
         .map((msg) => `${msg.senderName}: ${msg.text}`)
         .join("\n");
 
+      const otherParticipant = getOtherParticipant(selectedConversation);
+      const currentUserName =
+        userProfile?.name || user.displayName || "Current User";
+      const otherUserName = otherParticipant.name;
+
       const prompt = `
-      Analyze these recent messages for conflict, tension, or miscommunication:
-      ${messagesText}
+    Analyze these recent messages for conflict, tension, or miscommunication:
+    ${messagesText}
 
-      Respond with JSON format:
-      {
-        "hasConflict": boolean,
-        "conflictLevel": "low|medium|high",
-        "suggestion": "specific advice for de-escalation",
-        "recommendedResponse": "suggested diplomatic response"
-      }
+    Current user viewing this: ${currentUserName}
+    Other participant: ${otherUserName}
 
-      Focus on:
-      - Rental/roommate disputes
-      - Miscommunication about property details
-      - Pricing disagreements
-      - Scheduling conflicts
-      - Personality clashes
+    Generate PERSONALIZED suggestions for ${currentUserName} specifically.
 
-      If no conflict detected, return hasConflict: false.
+    Respond with JSON format:
+    {
+      "hasConflict": boolean,
+      "conflictLevel": "low|medium|high",
+      "suggestion": "specific advice for ${currentUserName} on how to handle this situation",
+      "recommendedResponse": "suggested diplomatic response that ${currentUserName} should send",
+      "targetUser": "${currentUserName}"
+    }
+
+    Important: 
+    - The suggestion should be tailored specifically for ${currentUserName}
+    - If ${currentUserName} sent the last message that seems aggressive, suggest self-reflection and a more diplomatic approach
+    - If ${otherUserName} sent the aggressive message, suggest how ${currentUserName} should respond diplomatically
+    - Consider the context of rental/roommate relationships
+    - Focus on de-escalation techniques appropriate for the current user's position
+
+    Focus on:
+    - Rental/roommate disputes
+    - Miscommunication about property details
+    - Pricing disagreements
+    - Scheduling conflicts
+    - Personality clashes
+
+    If no conflict detected, return hasConflict: false.
     `;
 
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
@@ -149,7 +167,12 @@ const Messages = ({ user, userProfile }) => {
       try {
         const analysis = JSON.parse(responseText);
         console.log(analysis, "conflict analysis result");
-        return analysis;
+
+        if (analysis.targetUser === currentUserName) {
+          return analysis;
+        }
+
+        return null;
       } catch (parseError) {
         console.error("Failed to parse conflict analysis:", parseError);
         console.error("Raw response:", responseText);
@@ -158,7 +181,12 @@ const Messages = ({ user, userProfile }) => {
           try {
             const analysis = JSON.parse(jsonMatch[0]);
             console.log(analysis, "conflict analysis result (fallback)");
-            return analysis;
+
+            if (analysis.targetUser === currentUserName) {
+              return analysis;
+            }
+
+            return null;
           } catch (fallbackError) {
             console.error("Fallback parsing also failed:", fallbackError);
           }
@@ -215,54 +243,88 @@ const Messages = ({ user, userProfile }) => {
       const documentType = isSharedRoom
         ? "Roommate Agreement"
         : "Lease Agreement";
+      const currentDate = new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
 
       const prompt = `
-      Generate a comprehensive ${documentType.toLowerCase()} based on these details:
-      
-      Property Details:
-      - Address: ${listingDetails.address}
-      - Rent: $${listingDetails.rent}/month
-      - Property Type: ${listingDetails.type}
-      - Room Type: ${listingDetails.roomType}
-      - Bedrooms: ${listingDetails.bedrooms}
-      - Bathrooms: ${listingDetails.bathrooms}
-      
-      Agreed Terms:
-      - Monthly ${isSharedRoom ? "Share" : "Rent"}: $${terms.rent}
-      - Security Deposit: $${terms.deposit}
-      - ${isSharedRoom ? "Agreement" : "Lease"} Duration: ${
-        terms.duration
-      } months
-      - Move-in Date: ${terms.moveInDate}
-      - Utilities Included: ${terms.utilities ? "Yes" : "No"}
-      - Furnished: ${terms.furnished ? "Yes" : "No"}
-      - Parking: ${terms.parking ? "Yes" : "No"}
-      - Pets Allowed: ${terms.pets ? "Yes" : "No"}
-      
-      Create a legally-informed ${documentType.toLowerCase()} covering:
-      ${
-        isSharedRoom
-          ? `
-      1. Shared room arrangement and personal space boundaries
-      2. Cost sharing and payment responsibilities
-      3. Shared facilities usage and cleaning duties
-      4. Guest policies and quiet hours
-      5. Personal belongings and storage arrangements
-      6. Conflict resolution and communication guidelines
-      7. Termination conditions and notice requirements
-      `
-          : `
-      1. Rental terms and payment schedule
-      2. Security deposit conditions
-      3. Utilities and maintenance responsibilities
-      4. Property usage and house rules
-      5. Termination conditions
-      6. Dispute resolution process
-      `
-      }
-      
-      Format as a clear, professional document with sections and bullet points.
-      Title the document as "${documentType}".
+    Generate a comprehensive and legally-informed ${documentType.toLowerCase()} in clean, professional format. Use proper formatting with clear headers and sections.
+
+    **AGREEMENT DETAILS:**
+    Document Type: ${documentType}
+    Date: ${currentDate}
+    
+    **PARTIES:**
+    ${
+      isSharedRoom
+        ? `
+    Roommate 1: ${terms.roommate1Name}
+    Email: ${terms.roommate1Email}
+    
+    Roommate 2: ${terms.roommate2Name}
+    Email: ${terms.roommate2Email}
+    `
+        : `
+    Landlord/Lister: ${terms.roommate1Name}
+    Email: ${terms.roommate1Email}
+    
+    Tenant: ${terms.roommate2Name}
+    Email: ${terms.roommate2Email}
+    `
+    }
+
+    **PROPERTY DETAILS:**
+    Address: ${listingDetails.address}
+    Room Type: ${listingDetails.roomType}
+    Room Size: ${listingDetails.roomSize?.area || "N/A"} sq ft
+    
+    **FINANCIAL TERMS:**
+    ${
+      isSharedRoom
+        ? `
+    Total Monthly Rent: $${terms.rent}
+    ${terms.roommate1Name} Share: $${terms.roommate1RentShare}
+    ${terms.roommate2Name} Share: $${terms.roommate2RentShare}
+    `
+        : `
+    Monthly Rent: $${terms.rent}
+    `
+    }
+    Security Deposit: $${terms.deposit}
+    Agreement Duration: ${terms.duration} months
+    Move-in Date: ${terms.moveInDate}
+    Utilities Included: ${terms.utilities ? "Yes" : "No"}
+    Furnished: ${terms.furnished ? "Yes" : "No"}
+    Parking: ${terms.parking ? "Yes" : "No"}
+    Pets Allowed: ${terms.pets ? "Yes" : "No"}
+    
+    **REQUIREMENTS:**
+    1. Create a professional, legally-informed document
+    2. Include all standard clauses for ${
+      isSharedRoom ? "roommate arrangements" : "rental agreements"
+    }
+    3. Cover payment terms, responsibilities, and termination conditions
+    4. Include dispute resolution procedures
+    5. Use clear, professional language
+    6. Format with proper headers and sections
+    ${
+      isSharedRoom
+        ? `
+    7. Include shared space usage guidelines
+    8. Define personal space boundaries
+    9. Include guest policies and quiet hours
+    10. Address cleaning and maintenance responsibilities
+    `
+        : `
+    7. Include property maintenance responsibilities
+    8. Define permitted use of property
+    9. Include standard landlord-tenant clauses
+    `
+    }
+    
+    Generate the complete ${documentType.toLowerCase()} now:
     `;
 
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
@@ -276,7 +338,6 @@ const Messages = ({ user, userProfile }) => {
     }
   };
 
-  // Load conversations with better error handling
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
@@ -301,8 +362,6 @@ const Messages = ({ user, userProfile }) => {
             id: doc.id,
             ...data,
           });
-
-          // Collect all participant IDs
           data.participants.forEach((id) => {
             if (id !== user.uid) {
               participantIds.add(id);
@@ -310,7 +369,6 @@ const Messages = ({ user, userProfile }) => {
           });
         });
 
-        // Fetch profiles for all participants
         const profilePromises = Array.from(participantIds).map((id) =>
           fetchParticipantProfile(id)
         );
@@ -338,11 +396,9 @@ const Messages = ({ user, userProfile }) => {
     return () => unsubscribe();
   }, [user]);
 
-  // Load messages for selected conversation
   useEffect(() => {
     if (!selectedConversation) return;
 
-    // Check if current user is lister
     checkIfCurrentUserIsLister(selectedConversation.id).then(
       setIsCurrentUserLister
     );
@@ -369,14 +425,16 @@ const Messages = ({ user, userProfile }) => {
 
         setMessages(messagesData);
 
-        // Check for conflict in recent messages
         if (messagesData.length >= 2) {
-          const conflictAnalysis = await detectConflictAndCoach(messagesData);
-          if (conflictAnalysis && conflictAnalysis.hasConflict) {
-            setConflictCoachSuggestion(conflictAnalysis);
-          } else {
-            setConflictCoachSuggestion(null);
-          }
+          const lastMessage = messagesData[messagesData.length - 1];
+          setTimeout(async () => {
+            const conflictAnalysis = await detectConflictAndCoach(messagesData);
+            if (conflictAnalysis && conflictAnalysis.hasConflict) {
+              setConflictCoachSuggestion(conflictAnalysis);
+            } else {
+              setConflictCoachSuggestion(null);
+            }
+          }, 500);
         }
 
         markMessagesAsRead(selectedConversation.id);
@@ -387,9 +445,8 @@ const Messages = ({ user, userProfile }) => {
     );
 
     return () => unsubscribe();
-  }, [selectedConversation]);
+  }, [selectedConversation, user, userProfile]);
 
-  // Mark messages as read
   const markMessagesAsRead = async (conversationId) => {
     try {
       const messagesRef = collection(
@@ -418,7 +475,6 @@ const Messages = ({ user, userProfile }) => {
     }
   };
 
-  // Send message with improved error handling
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation || isSending) return;
@@ -462,16 +518,25 @@ const Messages = ({ user, userProfile }) => {
   const handleLeaseFinalization = async () => {
     try {
       const details = await getListingDetails(selectedConversation.id);
+      const otherParticipant = getOtherParticipant(selectedConversation);
+
       if (details) {
         setListingDetails(details);
         setLeaseTerms((prev) => ({
           ...prev,
           rent: details.rent || "",
+          totalRent: details.rent || "",
           deposit: details.rent ? (details.rent * 1.5).toString() : "",
           utilities: details.amenities?.includes("Utilities") || false,
           furnished: details.amenities?.includes("Furnished") || false,
           parking: details.amenities?.includes("Parking") || false,
           pets: details.amenities?.includes("Pet-friendly") || false,
+          roommate1Name: userProfile?.name || user.displayName || "",
+          roommate1Email: userProfile?.email || user.email || "",
+          roommate2Name: otherParticipant.name || "",
+          roommate2Email: otherParticipant.profile?.email || "",
+          roommate1RentShare: details.rent ? (details.rent / 2).toString() : "",
+          roommate2RentShare: details.rent ? (details.rent / 2).toString() : "",
         }));
 
         setShowLeaseModal(true);
@@ -481,7 +546,7 @@ const Messages = ({ user, userProfile }) => {
       setError("Failed to load listing details for lease finalization.");
     }
   };
-  // Use conflict coach suggestion
+
   const useConflictCoachSuggestion = () => {
     if (
       conflictCoachSuggestion &&
@@ -549,6 +614,249 @@ const Messages = ({ user, userProfile }) => {
       return date.toLocaleDateString([], { month: "short", day: "numeric" });
     }
   };
+  const generateAndDownloadLease = async () => {
+    try {
+      setIsGeneratingLease(true);
+      const leaseAgreement = await generateLeaseAgreement(
+        listingDetails,
+        leaseTerms
+      );
+
+      if (leaseAgreement) {
+        const isSharedRoom = listingDetails.roomType === "shared";
+        const documentType = isSharedRoom
+          ? "Roommate Agreement"
+          : "Lease Agreement";
+
+        // Create PDF with markdown formatting
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 20;
+        const maxWidth = pageWidth - 2 * margin;
+
+        // Add document header
+        doc.setFontSize(18);
+        doc.setFont("helvetica", "bold");
+        doc.text(documentType, pageWidth / 2, 30, { align: "center" });
+
+        // Add property address
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Property: ${listingDetails.address}`, pageWidth / 2, 45, {
+          align: "center",
+        });
+
+        // Add date
+        const today = new Date().toLocaleDateString();
+        doc.text(`Date: ${today}`, pageWidth / 2, 55, { align: "center" });
+
+        // Add separator line
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.line(margin, 65, pageWidth - margin, 65);
+
+        // Process and render markdown content
+        const lines = leaseAgreement.split("\n");
+        let y = 80; // Start content below header
+
+        lines.forEach((line) => {
+          // Check if we need a new page
+          if (y > pageHeight - margin - 20) {
+            doc.addPage();
+            y = margin;
+          }
+
+          // Handle different markdown elements
+          if (line.startsWith("## ")) {
+            // Header 2 - Large bold text
+            const headerText = line.replace("## ", "");
+            doc.setFontSize(16);
+            doc.setFont("helvetica", "bold");
+
+            const headerLines = doc.splitTextToSize(headerText, maxWidth);
+            headerLines.forEach((headerLine) => {
+              doc.text(headerLine, margin, y);
+              y += 12;
+            });
+            y += 5; // Extra spacing after header
+          } else if (line.startsWith("### ")) {
+            // Header 3 - Medium bold text
+            const headerText = line.replace("### ", "");
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+
+            const headerLines = doc.splitTextToSize(headerText, maxWidth);
+            headerLines.forEach((headerLine) => {
+              doc.text(headerLine, margin, y);
+              y += 10;
+            });
+            y += 3; // Extra spacing after header
+          } else if (line.trim() === "") {
+            // Empty line - add spacing
+            y += 5;
+          } else {
+            // Regular text with possible bold formatting
+            doc.setFontSize(11);
+
+            // Handle bold text within paragraphs
+            if (line.includes("**")) {
+              const parts = line.split(/(\*\*[^*]+\*\*)/);
+              let textFragments = [];
+
+              parts.forEach((part) => {
+                if (part.startsWith("**") && part.endsWith("**")) {
+                  // Bold text
+                  const boldText = part.replace(/\*\*/g, "");
+                  textFragments.push({ text: boldText, bold: true });
+                } else if (part.trim() !== "") {
+                  // Normal text
+                  textFragments.push({ text: part, bold: false });
+                }
+              });
+
+              // Render mixed text
+              let currentX = margin;
+              textFragments.forEach((fragment) => {
+                doc.setFont("helvetica", fragment.bold ? "bold" : "normal");
+
+                const words = fragment.text.split(" ");
+                words.forEach((word, index) => {
+                  const spaceWidth = index > 0 ? doc.getTextWidth(" ") : 0;
+                  const wordWidth = doc.getTextWidth(word);
+
+                  if (currentX + spaceWidth + wordWidth > pageWidth - margin) {
+                    y += 8;
+                    currentX = margin;
+                  }
+
+                  if (index > 0 && currentX > margin) {
+                    doc.text(" ", currentX, y);
+                    currentX += spaceWidth;
+                  }
+
+                  doc.text(word, currentX, y);
+                  currentX += wordWidth;
+                });
+              });
+
+              y += 8; // Move to next line
+            } else {
+              // Regular text without bold formatting
+              doc.setFont("helvetica", "normal");
+              const textLines = doc.splitTextToSize(line, maxWidth);
+
+              textLines.forEach((textLine) => {
+                doc.text(textLine, margin, y);
+                y += 8;
+              });
+            }
+          }
+        });
+
+        // Generate PDF blob
+        const pdfBlob = doc.output("blob");
+
+        // Create filename for PDF
+        const filename = `${documentType
+          .toLowerCase()
+          .replace(" ", "-")}-${listingDetails.address.replace(
+          /[^a-zA-Z0-9]/g,
+          "-"
+        )}-${new Date().toISOString().split("T")[0]}.pdf`;
+
+        // Convert PDF blob to base64 for Firebase upload
+        const reader = new FileReader();
+        reader.readAsDataURL(pdfBlob);
+
+        reader.onloadend = async () => {
+          const base64Data = reader.result.split(",")[1];
+
+          // Upload PDF to Firebase Storage via API
+          const uploadResponse = await fetch("/api/storage", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              content: base64Data,
+              filename,
+              conversationId: selectedConversation.id,
+              documentType,
+              contentType: "application/pdf",
+              isBase64: true,
+            }),
+          });
+
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json();
+            throw new Error(errorData.error || "Failed to upload document");
+          }
+
+          const { downloadURL } = await uploadResponse.json();
+
+          // Download PDF locally for user
+          const url = window.URL.createObjectURL(pdfBlob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+
+          // Send message with download link
+          const now = Timestamp.now();
+          const messagesRef = collection(
+            db,
+            "conversations",
+            selectedConversation.id,
+            "messages"
+          );
+
+          await addDoc(messagesRef, {
+            text: `📋 ${documentType} Generated and Available for Download\n\nA comprehensive ${documentType.toLowerCase()} has been generated for this property. Both parties can download the document using the link below.\n\n🔗 Download: ${downloadURL}`,
+            senderId: user.uid,
+            senderName: userProfile?.name || user.displayName || "Anonymous",
+            createdAt: now,
+            read: false,
+            type: "lease_agreement",
+            downloadURL: downloadURL,
+            filename: filename,
+            documentType: documentType,
+          });
+
+          // Update conversation
+          const conversationRef = doc(
+            db,
+            "conversations",
+            selectedConversation.id
+          );
+          await updateDoc(conversationRef, {
+            lastMessage: `📋 ${documentType} generated and available for download`,
+            lastMessageAt: now,
+            lastMessageSenderId: user.uid,
+            leaseStatus: "document_generated",
+            leaseDocumentURL: downloadURL,
+            leaseDocumentName: filename,
+          });
+
+          setShowLeaseModal(false);
+          setError(null);
+        };
+
+        reader.onerror = (error) => {
+          console.error("Error reading PDF blob:", error);
+          setError("Failed to process PDF document");
+        };
+      }
+    } catch (error) {
+      console.error("Error generating lease document:", error);
+      setError(`Failed to generate lease document: ${error.message}`);
+    } finally {
+      setIsGeneratingLease(false);
+    }
+  };
   const checkIfCurrentUserIsLister = async (conversationId) => {
     try {
       const conversationRef = doc(db, "conversations", conversationId);
@@ -572,93 +880,6 @@ const Messages = ({ user, userProfile }) => {
     } catch (error) {
       console.error("Error checking lister status:", error);
       return false;
-    }
-  };
-
-  const generateAndDownloadLease = async () => {
-    try {
-      const leaseAgreement = await generateLeaseAgreement(
-        listingDetails,
-        leaseTerms
-      );
-
-      if (leaseAgreement) {
-        const isSharedRoom = listingDetails.roomType === "shared";
-        const documentType = isSharedRoom
-          ? "Roommate Agreement"
-          : "Lease Agreement";
-
-        // Create filename
-        const filename = `${documentType
-          .toLowerCase()
-          .replace(" ", "-")}-${listingDetails.address.replace(
-          /[^a-zA-Z0-9]/g,
-          "-"
-        )}-${new Date().toISOString().split("T")[0]}.txt`;
-
-        // Create blob
-        const blob = new Blob([leaseAgreement], { type: "text/plain" });
-
-        // Upload to Firebase Storage
-        const storageRef = ref(
-          storage,
-          `lease-documents/${selectedConversation.id}/${filename}`
-        );
-        const uploadResult = await uploadBytes(storageRef, blob);
-        const downloadURL = await getDownloadURL(uploadResult.ref);
-
-        // Download locally
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-
-        // Send message with download link
-        const now = Timestamp.now();
-        const messagesRef = collection(
-          db,
-          "conversations",
-          selectedConversation.id,
-          "messages"
-        );
-
-        await addDoc(messagesRef, {
-          text: `📋 ${documentType} Generated and Available for Download\n\nA comprehensive ${documentType.toLowerCase()} has been generated for this property. Both parties can download the document using the link below.\n\n🔗 Download: ${downloadURL}`,
-          senderId: user.uid,
-          senderName: userProfile?.name || user.displayName || "Anonymous",
-          createdAt: now,
-          read: false,
-          type: "lease_agreement",
-          downloadURL: downloadURL,
-          filename: filename,
-          documentType: documentType,
-        });
-
-        // Update conversation
-        const conversationRef = doc(
-          db,
-          "conversations",
-          selectedConversation.id
-        );
-        await updateDoc(conversationRef, {
-          lastMessage: `📋 ${documentType} generated and available for download`,
-          lastMessageAt: now,
-          lastMessageSenderId: user.uid,
-          leaseStatus: "document_generated",
-          leaseDocumentURL: downloadURL,
-          leaseDocumentName: filename,
-        });
-
-        setShowLeaseModal(false);
-        setError(null);
-      }
-    } catch (error) {
-      console.error("Error generating lease document:", error);
-      setError("Failed to generate lease document. Please try again.");
     }
   };
 
@@ -925,222 +1146,42 @@ const Messages = ({ user, userProfile }) => {
               </div>
             </div>
 
-            {showProfileModal && selectedUserProfile && (
-              <div className="fixed inset-0 bg-[#0000009a] bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto">
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-xl font-semibold text-gray-900">
-                        User Profile
-                      </h3>
-                      <button
-                        onClick={() => setShowProfileModal(false)}
-                        className="text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="w-6 h-6" />
-                      </button>
-                    </div>
-
-                    <div className="space-y-6">
-                      <div className="flex items-center space-x-4">
-                        <img
-                          src={
-                            selectedUserProfile.profileImage ||
-                            "https://img.freepik.com/premium-vector/vector-flat-illustration-grayscale-avatar-user-profile-person-icon-profile-picture-business-profile-woman-suitable-social-media-profiles-icons-screensavers-as-templatex9_719432-1351.jpg?semt=ais_hybrid&w=740"
-                          }
-                          alt={selectedUserProfile.name}
-                          className="w-16 h-16 object-cover rounded-full border-2 border-gray-200"
-                        />
-                        <div>
-                          <h2 className="text-2xl font-bold text-gray-900">
-                            {selectedUserProfile.name}
-                          </h2>
-                          {selectedUserProfile.profile?.email && (
-                            <p className="text-gray-600">
-                              {selectedUserProfile.profile.email}
-                            </p>
-                          )}
-                          {selectedUserProfile.profile?.age && (
-                            <p className="text-gray-600">
-                              Age: {selectedUserProfile.profile.age}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {selectedUserProfile.profile && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                              Lifestyle Preferences
-                            </h3>
-                            <div className="space-y-3">
-                              {selectedUserProfile.profile.preferences ? (
-                                <>
-                                  {selectedUserProfile.profile.preferences
-                                    .type === "structured" ? (
-                                    Object.entries(
-                                      selectedUserProfile.profile.preferences
-                                    )
-                                      .filter(([key]) => key !== "type")
-                                      .map(([key, value]) => (
-                                        <div
-                                          key={key}
-                                          className="flex items-center justify-between py-2 border-b border-gray-100"
-                                        >
-                                          <span className="text-gray-600 capitalize font-medium">
-                                            {key
-                                              .replace(/([A-Z])/g, " $1")
-                                              .trim()}
-                                          </span>
-                                          <span className="text-gray-900">
-                                            {value}
-                                          </span>
-                                        </div>
-                                      ))
-                                  ) : (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <h4 className="font-medium text-gray-900 mb-2">
-                                          Preferences Summary
-                                        </h4>
-                                        <p className="text-gray-600 leading-relaxed">
-                                          {
-                                            selectedUserProfile.profile
-                                              .preferences.conversationSummary
-                                          }
-                                        </p>
-                                      </div>
-                                      {selectedUserProfile.profile.preferences
-                                        .semanticTags && (
-                                        <div>
-                                          <h4 className="font-medium text-gray-900 mb-2">
-                                            Key Characteristics
-                                          </h4>
-                                          <div className="flex flex-wrap gap-2">
-                                            {selectedUserProfile.profile.preferences.semanticTags.map(
-                                              (tag, index) => (
-                                                <span
-                                                  key={index}
-                                                  className="bg-gray-100 text-gray-700 px-3 py-1 text-sm rounded-full border border-gray-200"
-                                                >
-                                                  {tag}
-                                                </span>
-                                              )
-                                            )}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <p className="text-gray-500 italic">
-                                  No preferences available
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                              Account Information
-                            </h3>
-                            <div className="space-y-3">
-                              {selectedUserProfile.profile.createdAt && (
-                                <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                                  <span className="text-gray-600 font-medium">
-                                    Member Since
-                                  </span>
-                                  <span className="text-gray-900">
-                                    {new Date(
-                                      selectedUserProfile.profile.createdAt
-                                    ).toLocaleDateString()}
-                                  </span>
-                                </div>
-                              )}
-                              {selectedUserProfile.profile.updatedAt && (
-                                <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                                  <span className="text-gray-600 font-medium">
-                                    Profile Updated
-                                  </span>
-                                  <span className="text-gray-900">
-                                    {new Date(
-                                      selectedUserProfile.profile.updatedAt
-                                    ).toLocaleDateString()}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                                <span className="text-gray-600 font-medium">
-                                  Account Status
-                                </span>
-                                <div className="flex items-center space-x-2">
-                                  <CheckCircle className="w-4 h-4 text-green-500" />
-                                  <span className="text-green-600 font-medium">
-                                    Active
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {!selectedUserProfile.profile && (
-                        <div className="text-center py-8">
-                          <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                          <h4 className="text-lg font-medium text-gray-900 mb-2">
-                            Limited Profile Information
-                          </h4>
-                          <p className="text-gray-600">
-                            This user hasn't completed their profile setup yet.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-6 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={() => setShowProfileModal(false)}
-                        className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
             {/* Conflict Coach Alert */}
             {conflictCoachSuggestion && (
               <div className="mx-4 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                 <div className="flex items-start space-x-3">
                   <Bot className="w-5 h-5 text-amber-600 mt-0.5" />
                   <div className="flex-1">
-                    <h4 className="text-sm font-medium text-amber-800">
+                    <h4 className="text-sm font-medium text-amber-800 flex items-center">
                       💡 Conflict Coach Suggestion
                     </h4>
                     <p className="text-sm text-amber-700 mt-1">
                       {conflictCoachSuggestion.suggestion}
                     </p>
-                    <div className="flex items-center space-x-2 mt-2">
-                      <button
-                        onClick={useConflictCoachSuggestion}
-                        className="text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-700"
-                      >
-                        Use Suggested Response
-                      </button>
-                      <button
-                        onClick={() => setConflictCoachSuggestion(null)}
-                        className="text-xs text-amber-600 hover:text-amber-700"
-                      >
-                        Dismiss
-                      </button>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={useConflictCoachSuggestion}
+                          className="text-xs bg-amber-600 text-white px-3 py-1 rounded hover:bg-amber-700 transition-colors"
+                        >
+                          Use Suggested Response
+                        </button>
+                        <button
+                          onClick={() => setConflictCoachSuggestion(null)}
+                          className="text-xs text-amber-600 hover:text-amber-700"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                      <span className="text-xs text-amber-600">
+                        Conflict Level: {conflictCoachSuggestion.conflictLevel}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((message) => {
                 const isOwnMessage = message.senderId === user.uid;
@@ -1248,6 +1289,7 @@ const Messages = ({ user, userProfile }) => {
         )}
       </div>
 
+      {/* Lease Finalization Modal */}
       {/* Lease Finalization Modal */}
       {showLeaseModal && listingDetails && (
         <div className="fixed inset-0 bg-[#00000086] bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1366,7 +1408,7 @@ const Messages = ({ user, userProfile }) => {
 
               {/* Lease Terms Form */}
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900">Lease Terms</h4>
+                <h4 className="font-medium text-gray-900"> Terms</h4>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1405,7 +1447,61 @@ const Messages = ({ user, userProfile }) => {
                     />
                   </div>
                 </div>
+                {listingDetails?.roomType === "shared" && (
+                  <>
 
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {leaseTerms.roommate1Name || "Your"} Share ($)
+                        </label>
+                        <input
+                          type="number"
+                          value={leaseTerms.roommate1RentShare}
+                          onChange={(e) =>
+                            setLeaseTerms((prev) => ({
+                              ...prev,
+                              roommate1RentShare: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="Your rent share"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {leaseTerms.roommate2Name || "Roommate"} Share ($)
+                        </label>
+                        <input
+                          type="number"
+                          value={leaseTerms.roommate2RentShare}
+                          onChange={(e) =>
+                            setLeaseTerms((prev) => ({
+                              ...prev,
+                              roommate2RentShare: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="Roommate rent share"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Rent share validation */}
+                    {leaseTerms.rent &&
+                      leaseTerms.roommate1RentShare &&
+                      leaseTerms.roommate2RentShare &&
+                      parseInt(leaseTerms.roommate1RentShare) +
+                        parseInt(leaseTerms.roommate2RentShare) !==
+                        parseInt(leaseTerms.rent) && (
+                        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                          ⚠️ Warning: Individual shares don't add up to total
+                          rent
+                        </div>
+                      )}
+                  </>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1527,9 +1623,10 @@ const Messages = ({ user, userProfile }) => {
                     disabled={
                       !leaseTerms.rent ||
                       !leaseTerms.deposit ||
-                      !leaseTerms.moveInDate
+                      !leaseTerms.moveInDate ||
+                      isGeneratingLease
                     }
-                    className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-6 py-2 bg-orange-600 cursor-pointer text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Generate & Download{" "}
                     {listingDetails?.roomType === "shared"

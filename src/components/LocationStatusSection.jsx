@@ -515,15 +515,15 @@ const LocationStatusSection = ({
                       handleSearchRadiusChange(parseInt(e.target.value))
                     }
                     className="flex-1 h-2 bg-gray-200 rounded-lg cursor-pointer"
-                    aria-label={`Search radius: ${searchRadius} miles`}
+                    aria-label={`Search radius: ${searchRadius} KM`}
                   />
                   <span className="text-sm font-medium text-gray-900 bg-white px-3 py-1 rounded-lg border border-gray-200 min-w-0 flex-shrink-0">
-                    {searchRadius} miles
+                    {searchRadius} KM
                   </span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-500">
-                  <span>1 mile</span>
-                  <span>50 miles</span>
+                  <span>1 KM</span>
+                  <span>50 KM</span>
                 </div>
               </div>
             </div>
