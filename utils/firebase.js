@@ -21,6 +21,7 @@ import {
   getDownloadURL 
 } from "firebase/storage";
 
+// Main project config (for auth, firestore, etc.)
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -31,13 +32,30 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// Separate project config for storage only
+const storageFirebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_MEASUREMENT_ID,
+};
+
+// Initialize both apps
 const app = initializeApp(firebaseConfig);
+const storageApp = initializeApp(storageFirebaseConfig, "storage-app");
+
+// Export services from main app
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
-export const storage = getStorage(app);
 
+// Export storage from separate app
+export const storage = getStorage(storageApp);
 
+// Rest of your functions remain the same
 export const uploadImage = async (file, path) => {
   try {
     const storageRef = ref(storage, path);
@@ -49,6 +67,7 @@ export const uploadImage = async (file, path) => {
     throw error;
   }
 };
+
 export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
@@ -143,6 +162,7 @@ export const checkUserExists = async (userId) => {
     return false;
   }
 };
+
 export const updateUserLocation = async (userId, locationData) => {
   try {
     const userRef = doc(db, 'users', userId);
@@ -156,4 +176,3 @@ export const updateUserLocation = async (userId, locationData) => {
     throw error;
   }
 };
-
