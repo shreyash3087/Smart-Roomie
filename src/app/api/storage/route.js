@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 
-// Firebase configuration
-const firebaseConfig = {
+// Main project config (for reference, not used in storage)
+const mainFirebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
@@ -12,12 +12,30 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase app
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+// Storage project config (using separate environment variables)
+const storageFirebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_APP_ID,
+};
+
+// Initialize Firebase apps
+const getMainApp = () => {
+  const existingApp = getApps().find(app => app.name === '[DEFAULT]');
+  return existingApp || initializeApp(mainFirebaseConfig);
+};
+
+const getStorageApp = () => {
+  const existingApp = getApps().find(app => app.name === 'storage-app');
+  return existingApp || initializeApp(storageFirebaseConfig, 'storage-app');
+};
 
 export async function POST(request) {
   try {
-    const { content, filename, conversationId, documentType } = await request.json();
+    const { content, filename, conversationId, documentType, contentType, isBase64 } = await request.json();
 
     if (!content || !filename || !conversationId) {
       return NextResponse.json(
@@ -27,15 +45,16 @@ export async function POST(request) {
     }
 
     // Check if storage bucket is configured
-    if (!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) {
+    if (!process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET) {
       return NextResponse.json(
-        { error: 'Firebase Storage bucket not configured. Please check your environment variables.' },
+        { error: 'Storage Firebase Storage bucket not configured. Please check your NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET environment variable.' },
         { status: 500 }
       );
     }
 
-    // Initialize storage
-    const storage = getStorage(app);
+    // Initialize storage from the separate storage app
+    const storageApp = getStorageApp();
+    const storage = getStorage(storageApp);
 
     // Create storage reference
     const storageRef = ref(
@@ -44,12 +63,21 @@ export async function POST(request) {
     );
 
     console.log('Uploading to path:', `lease-documents/${conversationId}/${filename}`);
-    console.log('Storage bucket:', process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    console.log('Storage bucket:', process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET);
+    console.log('Storage app name:', storageApp.name);
 
-    // Upload as string instead of blob (sometimes works better)
-    const uploadResult = await uploadString(storageRef, content, 'raw', {
-      contentType: 'text/plain'
-    });
+    let uploadResult;
+
+    if (isBase64 && contentType) {
+      // Handle base64 content (like PDF files)
+      const dataUrl = `data:${contentType};base64,${content}`;
+      uploadResult = await uploadString(storageRef, dataUrl, 'data_url');
+    } else {
+      // Handle text content
+      uploadResult = await uploadString(storageRef, content, 'raw', {
+        contentType: contentType || 'text/plain'
+      });
+    }
     
     console.log('Upload successful:', uploadResult.metadata.fullPath);
 
@@ -61,6 +89,7 @@ export async function POST(request) {
       downloadURL,
       filename,
       documentType,
+      storageBucket: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET,
       message: 'Document uploaded successfully'
     });
 
@@ -70,24 +99,26 @@ export async function POST(request) {
       code: error.code,
       message: error.message,
       customData: error.customData,
-      stack: error.stack
     });
     
     // More specific error handling
     let errorMessage = 'Failed to upload document';
     if (error.code === 'storage/unauthorized') {
-      errorMessage = 'Unauthorized access to Firebase Storage. Check your Firebase rules.';
+      errorMessage = 'Unauthorized access to Firebase Storage. Check your Firebase Storage rules and authentication.';
     } else if (error.code === 'storage/canceled') {
       errorMessage = 'Upload was canceled.';
     } else if (error.code === 'storage/unknown') {
       errorMessage = 'Unknown storage error. Check your Firebase configuration and storage bucket.';
+    } else if (error.code === 'app/invalid-app-argument') {
+      errorMessage = 'Invalid Firebase app configuration. Check your storage project environment variables.';
     }
     
     return NextResponse.json(
       { 
         error: errorMessage, 
         details: error.message,
-        code: error.code || 'unknown'
+        code: error.code || 'unknown',
+        storageBucket: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET
       },
       { status: 500 }
     );
@@ -110,7 +141,9 @@ export async function GET(request) {
       success: true,
       message: 'Storage API is working',
       conversationId,
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      mainStorageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      storageProjectBucket: process.env.NEXT_PUBLIC_STORAGE_FIREBASE_STORAGE_BUCKET,
+      appsInitialized: getApps().map(app => ({ name: app.name, projectId: app.options.projectId }))
     });
 
   } catch (error) {
